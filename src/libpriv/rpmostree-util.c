@@ -249,6 +249,99 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
   return g_strdup_printf ("%s.%llu", auto_version_prefix, num + 1);
 }
 
+struct VersionFieldToken {
+  const char *field_type;
+  const char *field_value;
+  const char *old_value;
+}
+
+#define AUTO_VERSION_FIELD_REGEX "<(\\w+): (.+)>"
+
+bool tokenize_version_fields (const char *version,
+                              const char *fmt,
+                              GPtrArray **out_tokens)
+{
+  g_autoptr(GRegex) field_regex = g_regex_new(AUTO_VERSION_FIELD_REGEX, 0, 0, NULL);
+  g_autoptr(GMatchInfo) match_info;
+  g_autoptr(GPtrArray) ret_tokens = g_ptr_array_new();
+  size_t i = 0, j = 0;
+
+  g_regex_match (field_regex, fmt, 0, &match_info);
+  while (g_match_info_matches (match_info))
+    {
+      VersionFieldToken *token = g_new (VersionFieldToken, 1);
+      g_autofree char *word = g_match_info_fetch (match_info, 0);
+      token->field_type = g_match_info_fetch (match_info, 1);
+      token->field_value = g_match_info_fetch (match_info, 2);
+
+      g_assert(word);
+      g_assert(token->field_type);
+      g_assert(token->field_value);
+
+      g_ptr_array_add(ret_tokens, token);
+
+      /* Skip matching characters - assume these
+       * are not part of a field. */
+      while (i < strlen(fmt) && j < strlen(version)
+         && fmt[i++] == version[j++]);
+
+      /* Sanity check - beginning of a new field. */
+      g_assert(fmt[i] == '<');
+
+      size_t field_length = 0;
+      if (g_strcmp0(token->field_type, "date"))
+        {
+          /* Manually counted from YYYYMMDD. */
+          field_length = 8;
+        }
+      else if (g_strcmp0(token->field_type, "increment"))
+        {
+          field_length = strlen(token->field_value);
+        }
+      else
+        {
+          /* Invalid field type. */
+          g_assert_not_reached();
+        }
+
+      token->old_value = g_strndup(version + j, field_length;
+
+      /* Skip the sizes of fields found. */
+      i += strlen(word);
+      j += field_length;
+
+      g_match_info_next (match_info, NULL);
+    }
+
+  *out_tokens = g_steal_pointer(&ret_tokens);
+  return TRUE;
+}
+
+#undef AUTO_VERSION_FIELD_REGEX
+
+bool make_version_from_fmt (const char *fmt,
+                            GPtrArray *tokens)
+{
+
+}
+
+/* Gets the next version prefix based on the format specifier
+ * and the last version prefix. */
+char *
+_rpmostree_util_next_version_fmt (const char *auto_version_fmt,
+                                  const char *last_version)
+{
+  g_autoptr(GPtrArray) auto_version_field_tokens = NULL;
+
+  if (!last_version)
+    return make_version_from_fmt (auto_version_fmt, NULL);
+
+  if (!tokenize_version_fields (last_version,
+      auto_version_fmt, &auto_version_field_tokens))
+    return make_version_from_fmt (auto_version_fmt, NULL);
+
+  return make_version_from_fmt (auto_version_fmt, auto_version_field_tokens);
+
 /* Replace every occurrence of @old in @buf with @new. */
 char *
 rpmostree_str_replace (const char  *buf,
