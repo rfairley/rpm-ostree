@@ -220,6 +220,8 @@ test_variant_to_nevra(void)
   g_assert_cmpstr (tarch, ==, arch);
 }
 
+// TODO: add a test here for semantics of next version
+
 int
 main (int   argc,
       char *argv[])

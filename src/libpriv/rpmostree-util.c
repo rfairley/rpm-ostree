@@ -250,7 +250,7 @@ rpmostree_translate_path_for_ostree (const char *path)
 // }
 
 /* For now, only accept numeric datetime directives. */
-#define VERSION_FMT_DATE_REGEX "<date: (\\d+)>"
+#define VERSION_FMT_DATE_REGEX "<date: (.+)>"
 #define VERSION_FMT_INCREMENT_REGEX "<increment: (X+)>"
 
 char *
@@ -390,6 +390,8 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
     }
 
   num = g_ascii_strtoull (last_increment, NULL, 10);
+
+  // TODO: if needs to take one more digit, then manually add in punctuation to fmt_middle if not already added so it can be separated
   next_increment = g_strdup_printf ("%0*llu", (int) increment_size, num + 1); // XXX: check cast to int is OK
   g_assert(strlen(next_increment) == increment_size);
 
