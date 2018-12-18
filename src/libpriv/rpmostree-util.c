@@ -449,7 +449,14 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
 
   /* increment_size is the number of leading zeroes for the increment. */
   size_t increment_size = strlen(fmt_increment);
-  next_increment = g_strdup_printf ("%0*llu", (int) increment_size, num + 1); // TODO: check cast to int is OK
+
+  if (increment_size > INT_MAX)
+    {
+      g_assert_not_reached();
+    }
+
+  next_increment = g_strdup_printf ("%0*llu", (int) increment_size, num + 1);
+  g_print("next_increment: %s\n", next_increment);
   g_assert(strlen(next_increment) == increment_size);
 
   char *ret_version = NULL;
@@ -487,6 +494,7 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
 
 #undef VERSION_FMT_DATE_REGEX
 #undef VERSION_FMT_INCREMENT_REGEX
+#undef DATE_BUFFER_SIZE
 
 /* Replace every occurrence of @old in @buf with @new. */
 char *
