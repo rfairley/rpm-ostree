@@ -226,10 +226,34 @@ rpmostree_translate_path_for_ostree (const char *path)
   return NULL;
 }
 
+/* Calculate the length that a date of
+ * format date_fmt takes when rendered.
+ * Supported directives: %Y %m %d
+ * To support a new directive, open an RFE (https://github.com/projectatomic/rpm-ostree/issues).
+ * Returns false if an invalid directive
+ * is given. */ 
+static bool
+is_valid_date_field(const char *date_fmt)
+{
+  /* Supported directives must all be numeric only and of fixed number of digits (size)
+   * as defined at http://www.cplusplus.com/reference/ctime/strftime/.
+   * XXX: year Y is treated as being of fixed size (4 digits). */
+  const char *supported_directives = "CdgGHIjmMSUVwWyY";
+
+  for (int i = 0; i < strlen(date_fmt); i++)
+    {
+      if (i % 2 == 0 && i != (strlen(date_fmt) - 1) && date_fmt[i] == '%')
+        continue;
+      else if (!strchr(supported_directives, date_fmt[i]))
+        return FALSE;
+    }
+
+  return TRUE;
+}
+
 #define VERSION_FMT_DATE_REGEX "<date: (.+)>"
 #define VERSION_FMT_INCREMENT_REGEX "<increment: (X+)>"
-/* TODO: Later set to max date size + 1 */
-#define DATETIME_BUFFER_SIZE 16
+#define DATE_BUFFER_SIZE 32
 
 char *
 _rpmostree_util_next_version (const char *auto_version_prefix,
@@ -327,8 +351,6 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
       g_assert_not_reached();
     }
 
-  size_t date_size = 8; // hardcode for now
-
   char *old_prefix_regex_str = g_regex_escape_string(fmt_prefix, strlen(fmt_prefix));
   char *old_middle_regex_str = g_regex_escape_string(fmt_middle, strlen(fmt_middle));
   char *old_postfix_regex_str = g_regex_escape_string(fmt_postfix, strlen(fmt_postfix));
@@ -337,6 +359,18 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
   g_print("old_prefix_regex_str: %s\n", old_prefix_regex_str);
   g_print("old_middle_regex_str: %s\n", old_middle_regex_str);
   g_print("old_postfix_regex_str: %s\n", old_postfix_regex_str);
+
+  GTimeVal current_datetime;
+  g_get_current_time(&current_datetime);
+  GDate current_date;
+  g_date_set_time_val(&current_date, &current_datetime);
+
+  char date_buffer[DATE_BUFFER_SIZE] = {};
+  size_t date_size = g_date_strftime(date_buffer, sizeof(date_buffer), fmt_date, &current_date);
+  if (date_size == 0)
+    {
+      g_assert_not_reached();
+    }
 
   if (fmt_date_p && fmt_increment_p)
     {
@@ -390,17 +424,18 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
   g_print("last_increment: %s\n", last_increment);
   g_print("last_date: %s\n", last_date);
 
-  char *next_increment = NULL;
-  char *next_date = g_new(char, date_size + 1);
+  if (!is_valid_date_field(fmt_date))
+    {
+      g_assert_not_reached();
+    }
 
-  GTimeVal current_datetime;
-  g_get_current_time(&current_datetime);
-  GDate current_date;
-  g_date_set_time_val(&current_date, &current_datetime);
+  char *next_increment = NULL;
+  char *next_date = g_new(char, strlen(last_date) + 1);
+
   g_print("%ld\n", date_size);
-  size_t new_date_size = g_date_strftime(next_date, date_size + 1, fmt_date, &current_date);
+  size_t new_date_size = g_date_strftime(next_date, strlen(last_date) + 1, fmt_date, &current_date);
   g_print("%ld\n", new_date_size);
-  g_assert( new_date_size == date_size );
+  g_assert( new_date_size == strlen(last_date) );
 
   g_assert(strlen(next_date) == strlen(last_date));
 
