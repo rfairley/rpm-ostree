@@ -59,8 +59,8 @@ assert_file_has_content os-release.prop OSTREE_VERSION=${releasever}.555
 assert_file_has_content os-release.prop 'VERSION="'${releasever}'\.555 (Atomic '
 echo "ok mutate-os-release (auto)"
 
-runcompose
-echo "ok compose (auto 2)"
+runcompose --force-nocache
+echo "ok compose (auto new commit)"
 
 ostree --repo=${repobuild} cat ${treeref} \
     /usr/lib/os.release.d/os-release-atomichost > os-release.prop
@@ -68,7 +68,7 @@ ostree --repo=${repobuild} cat ${treeref} \
 # VERSION_ID *shouldn't* change
 # (https://github.com/projectatomic/rpm-ostree/pull/433)
 assert_file_has_content os-release.prop VERSION_ID=${releasever}
-assert_file_has_content os-release.prop OSTREE_VERSION=${releasever}.555.2
-assert_file_has_content os-release.prop 'VERSION="'${releasever}'\.555.2 (Atomic '
+assert_file_has_content os-release.prop OSTREE_VERSION=${releasever}.555.1
+assert_file_has_content os-release.prop 'VERSION="'${releasever}'\.555.1 (Atomic '
 
-echo "ok mutate-os-release (auto 2)" 
+echo "ok mutate-os-release (auto new commit)" 
