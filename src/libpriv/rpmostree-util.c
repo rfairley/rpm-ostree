@@ -260,7 +260,7 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
                                               "<increment:");
   const bool has_date = (fmt_date_p != NULL);
   const bool has_increment = (fmt_increment_p != NULL);
-  const bool date_first = fmt_date_p < fmt_increment_p;
+  const bool date_first = (fmt_date_p && fmt_increment_p) && (fmt_date_p < fmt_increment_p);
   g_autofree char *fmt_regex_str = NULL;
   g_autofree char *fmt_prefix = NULL;
   g_autofree char *fmt_date = NULL;
@@ -377,8 +377,10 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
     g_autofree char *last_prefix_regex_str = g_regex_escape_string (fmt_prefix,
                                                                   strlen (fmt_prefix));
     g_autofree char *last_date = NULL;
-    g_autofree char *last_middle_regex_str = g_regex_escape_string (fmt_middle,
-                                                                    strlen (fmt_middle));
+    g_autofree char *last_middle_regex_str = fmt_middle ?
+                                             g_regex_escape_string (fmt_middle,
+                                                                    strlen (fmt_middle))
+                                             : g_strdup("");
     g_autofree char *last_increment = NULL;
     g_autofree char *last_postfix_regex_str = g_regex_escape_string (fmt_postfix,
                                                                     strlen (fmt_postfix));
@@ -437,13 +439,16 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
 
     /* Calculate the next increment and leading zeroes. */
     /* If the date changed, reset the increment. */
-    if (g_strcmp0 (date_buffer, last_date) != 0)
+    if (!last_increment
+        || (has_date && g_strcmp0 (date_buffer, last_date) != 0))
       increment_num = 0;
     else
       increment_num = g_ascii_strtoull (last_increment, NULL, 10);
 
-    next_increment = g_strdup_printf ("%0*llu", num_leading_zeroes <= INT_MAX ?
-                      (int) num_leading_zeroes : 1, increment_num + 1);
+    next_increment = g_strdup_printf ("%0*llu",
+                                      num_leading_zeroes <= INT_MAX ?
+                                      (int) num_leading_zeroes : 1,
+                                      increment_num + 1);
 
     /* Format the string with the new increment and/or date. */
     if (has_date)

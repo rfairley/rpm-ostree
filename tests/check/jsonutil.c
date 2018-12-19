@@ -94,6 +94,10 @@ test_auto_version (void)
   _VER_TST("10.1", "10.1.x", "10.1.1");
   _VER_TST("10.1", "10.1.2x", "10.1.3");
 
+  _VER_TST("10.<increment: XXX>", "", "10.001");
+  _VER_TST("10.<increment: XXX>", "10", "10.001");
+  _VER_TST("10.<increment: XXX>", "10.001", "10.002");
+
 #define _VER_CMPLX_TST(pre, last, finalfmt, datefmt)        \
   g_date_strftime (date_buffer, sizeof(date_buffer),        \
                    datefmt, &current_date);                 \
@@ -105,8 +109,26 @@ test_auto_version (void)
   version = NULL;                                           \
   final_version = NULL;
 
+  /* Test tends towards the given format. */
   _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "", "10.%s.001", "%Y%m%d");
   _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "10", "10.%s.001", "%Y%m%d");
+  _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "10.1", "10.%s.001", "%Y%m%d");
+  _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "10.1.1", "10.%s.001", "%Y%m%d");
+  _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "10.1.1.1", "10.%s.001", "%Y%m%d");
+  _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "10abcd", "10.%s.001", "%Y%m%d");
+  _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "abcd", "10.%s.001", "%Y%m%d");
+  _VER_CMPLX_TST("10.<increment: XXX>.<date: %Y%m%d>", "10.20001010.001", "10.001.%s", "%Y%m%d");
+
+  /* Test tends towards the given format with no punctuation. */
+  _VER_CMPLX_TST("10<date: %Y%m%d><increment: XXX>", "", "10%s001", "%Y%m%d");
+  _VER_CMPLX_TST("10<date: %Y%m%d><increment: XXX>", "10abcd", "10%s001", "%Y%m%d");
+  _VER_CMPLX_TST("10<date: %Y%m%d><increment: XXX>", "10200010109", "10%s001", "%Y%m%d");
+
+  /* Test increment. */
+  const char *prev_version = g_strdup_printf("10.001.%s", date_buffer);
+  _VER_CMPLX_TST("10.<increment: XXX>.<date: %Y%m%d>", "10.001.20001010", "10.001.%s", "%Y%m%d");
+  _VER_CMPLX_TST("10.<increment: XXX>.<date: %Y%m%d>", prev_version, "10.002.%s", "%Y%m%d");
+
 }
 
 int
