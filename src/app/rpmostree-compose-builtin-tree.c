@@ -791,8 +791,8 @@ impl_install_tree (RpmOstreeTreeComposeContext *self,
           (void)g_variant_lookup (previous_metadata, OSTREE_COMMIT_META_KEY_VERSION, "s", &last_version);
         }
 
-      if (! _rpmostree_util_next_version_fmt (ver_prefix, last_version, &next_version, error))
-        return FALSE;
+      next_version = _rpmostree_util_next_version (ver_prefix, last_version);
+      g_print("next version: %s\n", next_version);
       g_hash_table_insert (self->metadata, g_strdup (OSTREE_COMMIT_META_KEY_VERSION),
                            g_variant_ref_sink (g_variant_new_string (next_version)));
     }

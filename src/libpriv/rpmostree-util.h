@@ -81,11 +81,11 @@ char *
 _rpmostree_util_next_version (const char *auto_version_prefix,
                               const char *last_version);
 
-gboolean
+char *
 _rpmostree_util_next_version_fmt (const char     *auto_version_prefix,
                                   const char     *last_version,
-                                  char          **out_version,
-                                  GError        **error);
+                                  const char     *fmt_date_p,
+                                  const char     *fmt_increment_p);
 
 char *
 rpmostree_str_replace (const char  *buf,
