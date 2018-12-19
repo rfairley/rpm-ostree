@@ -53,6 +53,12 @@ static void
 test_auto_version (void)
 {
   char *version = NULL;
+  char *final_version = NULL;
+  GTimeVal current_datetime;
+  GDate current_date;
+  char date_buffer[16] = {'\0'};
+  g_get_current_time (&current_datetime);
+  g_date_set_time_val (&current_date, &current_datetime);
 
 #define _VER_TST(x, y, z)                              \
   version = _rpmostree_util_next_version ((x), (y));   \
@@ -87,6 +93,20 @@ test_auto_version (void)
   _VER_TST("10.1", "10.1x", "10.1");
   _VER_TST("10.1", "10.1.x", "10.1.1");
   _VER_TST("10.1", "10.1.2x", "10.1.3");
+
+#define _VER_CMPLX_TST(pre, last, finalfmt, datefmt)        \
+  g_date_strftime (date_buffer, sizeof(date_buffer),        \
+                   datefmt, &current_date);                 \
+  final_version = g_strdup_printf(finalfmt, date_buffer);   \
+  version = _rpmostree_util_next_version ((pre), (last));   \
+  g_assert_cmpstr (version, ==, final_version);             \
+  g_free(final_version);                                    \
+  g_free(version);                                          \
+  version = NULL;                                           \
+  final_version = NULL;
+
+  _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "", "10.%s.001", "%Y%m%d");
+  _VER_CMPLX_TST("10.<date: %Y%m%d>.<increment: XXX>", "10", "10.%s.001", "%Y%m%d");
 }
 
 int
