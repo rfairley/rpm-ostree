@@ -226,6 +226,29 @@ rpmostree_translate_path_for_ostree (const char *path)
   return NULL;
 }
 
+char *
+_rpmostree_util_next_version (const char *auto_version_prefix,
+                              const char *last_version)
+{
+  unsigned long long num = 0;
+  const char *end = NULL;
+
+  if (!last_version || !g_str_has_prefix (last_version, auto_version_prefix))
+    return g_strdup (auto_version_prefix);
+
+  if (g_str_equal (last_version, auto_version_prefix))
+    return g_strdup_printf ("%s.1", auto_version_prefix);
+
+  end = last_version + strlen(auto_version_prefix);
+
+  if (*end != '.')
+    return g_strdup (auto_version_prefix);
+  ++end;
+
+  num = g_ascii_strtoull (end, NULL, 10);
+  return g_strdup_printf ("%s.%llu", auto_version_prefix, num + 1);
+}
+
 /* Calculate the length that a date of
  * format date_fmt takes when rendered.
  * Supported directives: %Y %m %d
@@ -255,16 +278,18 @@ is_valid_date_field(const char *date_fmt)
 #define VERSION_FMT_INCREMENT_REGEX "<increment: (X+)>"
 #define DATE_BUFFER_SIZE 32
 
-char *
-_rpmostree_util_next_version (const char *auto_version_prefix,
-                              const char *last_version)
+gboolean
+_rpmostree_util_next_version_fmt (const char     *auto_version_prefix,
+                                  const char     *last_version,
+                                  char          **out_version,
+                                  GError        **error)
 {
-  unsigned long long num = 0;
-  const char *end = NULL;
   char *fmt_date_p = NULL;
   char *fmt_increment_p = NULL;
   bool date_first = FALSE;
   char *regex_str = NULL;
+  g_autofree char *ret_version = NULL;
+  g_autoptr(GError) temp_error = NULL;
 
   fmt_date_p = g_strstr_len(auto_version_prefix, strlen(auto_version_prefix), "<date:");
   fmt_increment_p = g_strstr_len(auto_version_prefix, strlen(auto_version_prefix), "<increment:");
@@ -287,35 +312,28 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
     }
   else
     {
-      if (!last_version || !g_str_has_prefix (last_version, auto_version_prefix))
-        return g_strdup (auto_version_prefix);
-
-      if (g_str_equal (last_version, auto_version_prefix))
-        return g_strdup_printf ("%s.1", auto_version_prefix);
-
-      end = last_version + strlen(auto_version_prefix);
-
-      if (*end != '.')
-        return g_strdup (auto_version_prefix);
-      ++end;
-
-      num = g_ascii_strtoull (end, NULL, 10);
-      return g_strdup_printf ("%s.%llu", auto_version_prefix, num + 1);
+      ret_version = _rpmostree_util_next_version (auto_version_prefix, last_version);
+      *out_version = g_steal_pointer(&ret_version);
+      return TRUE;
     }
 
-  g_autoptr(GRegex) field_regex = g_regex_new(regex_str, 0, 0, NULL);
-  g_autoptr(GMatchInfo) match_info;
-
-  if (!g_regex_match (field_regex, auto_version_prefix, 0, &match_info))
+  g_autoptr(GRegex) field_regex = g_regex_new(regex_str, 0, 0, &temp_error);
+  if (temp_error)
     {
-      g_assert_not_reached();
+      g_propagate_error(error, g_steal_pointer(&temp_error));
+      return FALSE;
     }
+
+  g_autoptr(GMatchInfo) match_info;
 
   char *fmt_prefix = NULL;
   char *fmt_date = NULL;
   char *fmt_middle = NULL;
   char *fmt_increment = NULL;
   char *fmt_postfix = NULL;
+
+  if (!g_regex_match (field_regex, auto_version_prefix, 0, &match_info))
+    return glnx_throw_errno_prefix (error, "invalid characters in <date or <increment format field");
 
   if (fmt_date_p && fmt_increment_p)
     {
@@ -346,150 +364,106 @@ _rpmostree_util_next_version (const char *auto_version_prefix,
       fmt_increment = g_match_info_fetch (match_info, 2);
       fmt_postfix = g_match_info_fetch (match_info, 3);
     }
-  else
-    {
-      g_assert_not_reached();
-    }
 
   char *old_prefix_regex_str = g_regex_escape_string(fmt_prefix, strlen(fmt_prefix));
   char *old_middle_regex_str = g_regex_escape_string(fmt_middle, strlen(fmt_middle));
   char *old_postfix_regex_str = g_regex_escape_string(fmt_postfix, strlen(fmt_postfix));
-  char *last_version_regex_str = NULL;
-
-  g_print("old_prefix_regex_str: %s\n", old_prefix_regex_str);
-  g_print("old_middle_regex_str: %s\n", old_middle_regex_str);
-  g_print("old_postfix_regex_str: %s\n", old_postfix_regex_str);
 
   GTimeVal current_datetime;
   g_get_current_time(&current_datetime);
   GDate current_date;
   g_date_set_time_val(&current_date, &current_datetime);
 
+  if (!is_valid_date_field(fmt_date))
+    return glnx_throw_errno_prefix (error, "date field invalid: %s", fmt_date);
+
   char date_buffer[DATE_BUFFER_SIZE] = {};
-  size_t date_size = g_date_strftime(date_buffer, sizeof(date_buffer), fmt_date, &current_date);
+  const size_t date_size = g_date_strftime(date_buffer, sizeof(date_buffer), fmt_date, &current_date);
   if (date_size == 0)
-    {
-      g_assert_not_reached();
-    }
+    return glnx_throw_errno_prefix (error, "g_date_strftime failed: %s", fmt_date);
 
-  if (fmt_date_p && fmt_increment_p)
-    {
-      if (date_first)
-        {
-          last_version_regex_str = g_strdup_printf("%s(\\d{%ld})%s(\\d+)%s", old_prefix_regex_str, date_size, old_middle_regex_str, old_postfix_regex_str);
-        }
-      else
-        {
-          last_version_regex_str = g_strdup_printf("%s(\\d+)%s(\\d{%ld})%s", old_prefix_regex_str, old_middle_regex_str, date_size, old_postfix_regex_str);
-        }
-    }
-  else if (fmt_increment_p)
-    {
-      last_version_regex_str = g_strdup_printf("%s(\\d+)%s", old_prefix_regex_str, old_postfix_regex_str);
-    }
-
-  g_autoptr(GRegex) old_regex = g_regex_new(last_version_regex_str, 0, 0, NULL);
-  g_autoptr(GMatchInfo) old_match_info;
-
-  if (!g_regex_match (old_regex, last_version, 0, &old_match_info))
-    {
-      g_assert_not_reached();
-    }
-
+  char *last_version_regex_str = NULL;
   char *last_increment = NULL;
   char *last_date = NULL;
 
+  /* NB: don't need to scan the date if increment wasn't passed. */
   if (fmt_date_p && fmt_increment_p)
     {
       if (date_first)
-        {
-          last_date = g_match_info_fetch (old_match_info, 1);
-          last_increment = g_match_info_fetch (old_match_info, 2);
-        }
+          last_version_regex_str = g_strdup_printf("%s(\\d{%ld})%s(\\d+)%s", old_prefix_regex_str, date_size, old_middle_regex_str, old_postfix_regex_str);
       else
-        {
-          last_date = g_match_info_fetch (old_match_info, 2);
-          last_increment = g_match_info_fetch (old_match_info, 1);
-        }
+          last_version_regex_str = g_strdup_printf("%s(\\d+)%s(\\d{%ld})%s", old_prefix_regex_str, old_middle_regex_str, date_size, old_postfix_regex_str);
     }
   else if (fmt_increment_p)
+    last_version_regex_str = g_strdup_printf("%s(\\d+)%s", old_prefix_regex_str, old_postfix_regex_str);
+
+  if (last_version_regex_str)
     {
-      last_increment = g_match_info_fetch (old_match_info, 1);
-    }
-  else if (fmt_date_p)
-    {
-      last_date = g_match_info_fetch (old_match_info, 1);
-    }
+      g_autoptr(GRegex) old_regex = g_regex_new(last_version_regex_str, 0, 0, &temp_error);
+      if (temp_error)
+        {
+          g_propagate_error(error, g_steal_pointer(&temp_error));
+          return FALSE;
+        }
 
-  g_print("last_increment: %s\n", last_increment);
-  g_print("last_date: %s\n", last_date);
+      g_autoptr(GMatchInfo) old_match_info;
 
-  if (!is_valid_date_field(fmt_date))
-    {
-      g_assert_not_reached();
-    }
+      g_regex_match (old_regex, last_version, 0, &old_match_info);
 
-  char *next_increment = NULL;
-  char *next_date = g_new(char, strlen(last_date) + 1);
-
-  g_print("%ld\n", date_size);
-  size_t new_date_size = g_date_strftime(next_date, strlen(last_date) + 1, fmt_date, &current_date);
-  g_print("%ld\n", new_date_size);
-  g_assert( new_date_size == strlen(last_date) );
-
-  g_assert(strlen(next_date) == strlen(last_date));
-
-  num = g_ascii_strtoull (last_increment, NULL, 10);
-
-  /* If the date changed, reset to 1. */
-  if (g_strcmp0(next_date, last_date) != 0)
-    {
-      num = 0;
+      if (fmt_date_p && fmt_increment_p)
+        {
+          if (date_first)
+            {
+              last_date = g_match_info_fetch (old_match_info, 1);
+              last_increment = g_match_info_fetch (old_match_info, 2);
+            }
+          else
+            {
+              last_date = g_match_info_fetch (old_match_info, 2);
+              last_increment = g_match_info_fetch (old_match_info, 1);
+            }
+        }
+      else if (fmt_increment_p)
+        last_increment = g_match_info_fetch (old_match_info, 1);
     }
 
-  /* increment_size is the number of leading zeroes for the increment. */
+  char *next_date = g_new(char, date_size + 1);
+  unsigned long long increment_num = 0;
+
+  if (g_date_strftime(next_date, date_size + 1, fmt_date, &current_date) == 0)
+    return glnx_throw_errno_prefix (error, "error getting next version date");
+
+  /* If the date changed, reset the increment. */
+  if (!last_version_regex_str || g_strcmp0(last_increment, "") == 0 || g_strcmp0(next_date, last_date) != 0)
+    increment_num = 0;
+  else
+    increment_num = g_ascii_strtoull (last_increment, NULL, 10);
+
+  /* increment_size is the number of leading zeroes to print for the increment_num. */
   size_t increment_size = strlen(fmt_increment);
 
-  if (increment_size > INT_MAX)
-    {
-      g_assert_not_reached();
-    }
-
-  next_increment = g_strdup_printf ("%0*llu", (int) increment_size, num + 1);
-  g_print("next_increment: %s\n", next_increment);
-  g_assert(strlen(next_increment) == increment_size);
-
-  char *ret_version = NULL;
+  char *next_increment = NULL;
+  next_increment = g_strdup_printf ("%0*llu", increment_size <= INT_MAX ? (int) increment_size : 1, increment_num + 1);
 
   if (fmt_date_p && fmt_increment_p)
     {
       if (date_first)
-        {
           ret_version = g_strdup_printf("%s%s%s%s%s", fmt_prefix, next_date, fmt_middle, next_increment, fmt_postfix);
-        }
       else
-        {
           ret_version = g_strdup_printf("%s%s%s%s%s", fmt_prefix, next_increment, fmt_middle, next_date, fmt_postfix);
-        }
     }
   else if (fmt_date_p)
-    {
       ret_version = g_strdup_printf("%s%s%s", fmt_prefix, next_date, fmt_postfix);
-    }
   else if (fmt_increment_p)
-    {
       ret_version = g_strdup_printf("%s%s%s", fmt_prefix, next_increment, fmt_postfix);
-    }
-  else
-    {
-      g_assert_not_reached();
-    }
 
   g_assert(ret_version);
 
   g_print("next version: %s\n", ret_version);
 
-  return ret_version;
+  *out_version = g_steal_pointer(&ret_version);
+
+  return TRUE;
 }
 
 #undef VERSION_FMT_DATE_REGEX
