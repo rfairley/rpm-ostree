@@ -226,7 +226,10 @@ rpmostree_translate_path_for_ostree (const char *path)
   return NULL;
 }
 
-/* replaces [match_start, match_end) in version with rendered date_fmt */
+/* Replace [match_start, match_end) in version with rendered date_fmt.
+ *
+ * Returns TRUE on success, FALSE otherwise.
+ */
 static gboolean
 handle_date_tag (GString    *version,
                  const char *date_fmt,
@@ -244,16 +247,53 @@ handle_date_tag (GString    *version,
   return TRUE;
 }
 
+ /* Appends a version number to next_version, if the number
+ * is not present in last_version. If it is present, the version
+ * number is parsed, then incremented.
+ * If increment_start is set, this string is the first value a
+ * newly appended version number is set to. If NULL, then default to
+ * not appending the version number the first time.
+ * 
+ * Returns next_version with the incremented or appended version number.
+ */
+static char*
+increment_version (const char *last_version,
+                   const char *next_version
+                   const char *increment_start)
+{
+  const char *end = NULL;
+  unsigned long long num = 0;
+  const gboolean increment_given = increment_start != NULL;
+
+  g_assert_cmpstr (next_version, !=, NULL);
+
+  if (!last_version || !g_str_has_prefix (last_version, next_version))
+    return increment_given ? g_strdup_printf ("%s.%s", next_version, increment_start)
+                           : g_strdup (next_version);
+
+  if ((g_str_equal (last_version, next_version))
+    return increment_given ? g_strdup_printf ("%s.%s", next_version, increment_start)
+                           : g_strdup_printf ("%s.1", next_version);
+
+  g_assert_cmpuint (strlen (last_version), >, strlen (next_version));
+  end = last_version + strlen (next_version);
+
+  if (*end != '.')
+    return increment_given ? g_strdup_printf ("%s.%s", next_version, increment_start)
+                           : g_strdup (next_version);
+  ++end;
+
+  num = g_ascii_strtoull (end, NULL, 10);
+  return g_strdup_printf ("%s.%llu", next_version, num + 1);
+}
+
 #define VERSION_TAG_REGEX "<([a-zA-Z]+):(.*)?>"
 
 /* Get the next version, given a version prefix and a last version.
  * Checks for supported version fields in the auto_version_prefix
  * and renders them.
- * Appends a version number to the version string returned, if it
- * is not present in last_version; if it is present, the version
- * number is incremented.
  * 
- * Returns the next version string if successful, and NULL in case of error.
+ * Returns the next version string if successful, NULL otherwise.
  */
 char *
 _rpmostree_util_next_version (const char   *auto_version_prefix,
@@ -290,25 +330,7 @@ _rpmostree_util_next_version (const char   *auto_version_prefix,
       g_match_info_next (tag_match_info, NULL);
     }
 
-  char *next_version_str = g_strdup (next_version->str);
-  const char *end = NULL;
-  unsigned long long num = 0;
-
-  if (!last_version || !g_str_has_prefix (last_version, next_version_str))
-    return tag_given ? g_strdup_printf ("%s.0", next_version_str) : g_strdup (next_version_str);
-
-  if (g_str_equal (last_version, next_version_str))
-    return tag_given ? g_strdup_printf ("%s.0", next_version_str) : g_strdup_printf ("%s.1", next_version_str);
-
-  g_assert_cmpuint (strlen (last_version), >, strlen (next_version_str));
-  end = last_version + strlen (next_version_str);
-
-  if (*end != '.')
-    return tag_given ? g_strdup_printf ("%s.0", next_version_str) : g_strdup (next_version_str);
-  ++end;
-
-  num = g_ascii_strtoull (end, NULL, 10);
-  return g_strdup_printf ("%s.%llu", next_version_str, num + 1);
+  return increment_version (last_version, next_version->str, tag_given ? "0" : NULL);
 }
 
 #undef VERSION_TAG_REGEX

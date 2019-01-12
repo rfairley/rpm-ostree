@@ -121,6 +121,27 @@ test_auto_version (void)
   _VER_DATE_TST("10.<date:%Y%m%d>", prev_version, "10.%Y%m%d.2");
   g_free (prev_version);
 
+  /* Test append version number. */
+  prev_version = g_date_time_format (date_time_utc, "10.%Y%m%d.0");
+  _VER_DATE_TST("10.<date:%Y%m%d>.0", prev_version, "10.%Y%m%d.0.0");
+  g_free (prev_version);
+  prev_version = g_date_time_format (date_time_utc, "10.%Y%m%d.x");
+  _VER_DATE_TST("10.<date:%Y%m%d>", prev_version, "10.%Y%m%d.0");
+  g_free (prev_version);
+  prev_version = g_date_time_format (date_time_utc, "10.%Y%m%d.x");
+  _VER_DATE_TST("10.<date:%Y%m%d>.", prev_version, "10.%Y%m%d.0");
+  g_free (prev_version);
+  prev_version = g_date_time_format (date_time_utc, "10.%Y%m%d.2.x");
+  _VER_DATE_TST("10.<date:%Y%m%d>.2", prev_version, "10.%Y%m%d.2.0");
+  g_free (prev_version);
+  prev_version = g_date_time_format (date_time_utc, "10.%Y%m%d.1.2x");
+  _VER_DATE_TST("10.<date:%Y%m%d>.2", prev_version, "10.%Y%m%d.1.3");
+  g_free (prev_version);
+  prev_version = g_date_time_format (date_time_utc, "10.%Y%m%d.0");
+  _VER_DATE_TST("10.<date:%Y%m%d>.1.xyz", prev_version, "10.%Y%m%d.0");
+  g_free (prev_version);
+
+
   /* Test variations to the formatting. */
   _VER_DATE_TST("10.<date: %Y%m%d>",          "10.20001010",    "10. %Y%m%d.0");
   _VER_DATE_TST("10.<date:%Y%m%d>.",          "10.20001010.",   "10.%Y%m%d..0");
