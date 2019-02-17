@@ -64,3 +64,31 @@
 
     - command: rpm-ostree install fuse-sshfs
       when: rpmq_fuse_sshfs.rc != 0
+    
+    - command: umount /dev/vda1
+      register: umountboot
+    
+    - command: e2fsck -fp /dev/vda1
+      register: checkboot
+
+    - command: resize2fs /dev/vda1 30466
+      register: resizeboot
+
+    # Resize boot for testing boot space checks.
+    - parted:
+        device: /dev/vda
+        number: 1
+        state: absent
+
+    - parted:
+        device: /dev/vda
+        number: 1
+        state: present
+        part_start: 2048s
+        part_end: 245792s
+        part_type: primary
+        flags: [ lba ]
+
+    - command: df -hk /boot
+      register: freespaceboot
+

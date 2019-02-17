@@ -4,10 +4,10 @@
 
 Vagrant.configure(2) do |config|
 
-    config.vm.box = "centosah/7alpha"
-    config.vm.box_url = 'https://ci.centos.org/artifacts/sig-atomic/centos-continuous/images-alpha/cloud/latest/images/centos-atomic-host-7-vagrant-libvirt.box'
+    config.vm.box = "fedora/28-atomic-host"
+    #config.vm.box_url = 'https://ci.centos.org/artifacts/sig-atomic/centos-continuous/images-alpha/cloud/latest/images/centos-atomic-host-7-vagrant-libvirt.box'
 
-    config.vm.hostname = "centosah-dev"
+    #config.vm.hostname = "centosah-dev"
 
     config.vm.define "vmcheck" do |vmcheck|
     end
@@ -29,7 +29,7 @@ Vagrant.configure(2) do |config|
     config.vm.provision "ansible" do |ansible|
       ansible.playbook = "vagrant/setup.yml"
       ansible.host_key_checking = false
-      ansible.raw_ssh_args = ['-o ControlMaster=no']
+      ansible.raw_ssh_args = ['-o ControlMaster=no -o ControlPath=/dev/shm/control:%h:%p:%r -o ControlPersist=yes']
       # for debugging the ansible playbook
       #ansible.raw_arguments = ['-v']
     end
